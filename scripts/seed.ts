@@ -6,23 +6,25 @@
  *   npm run db:seed
  *
  * Safe to re-run: clears all data first (respects FK order).
+ * Also exported as seed() for use in the test harness.
  */
-import { PrismaClient, OrderStatus } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { OrderStatus } from '@prisma/client'
+import { prisma } from '../lib/prisma'
 
 // Dates relative to 2026-06-22 (project current date)
 const NOW = new Date('2026-06-22T12:00:00Z')
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 24 * 60 * 60 * 1000)
 
-async function main() {
-  console.log('Clearing existing data...')
+export async function seed(silent = false) {
+  const log = silent ? () => {} : console.log
+
+  log('Clearing existing data...')
   await prisma.refundTransaction.deleteMany()
   await prisma.traceLog.deleteMany()
   await prisma.order.deleteMany()
   await prisma.customer.deleteMany()
 
-  console.log('Seeding customers and orders...')
+  log('Seeding customers and orders...')
 
   // ---------------------------------------------------------------------------
   // 1. Alice Johnson — straightforward eligible refund
@@ -45,7 +47,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${alice.name}`)
+  log(`  Created customer: ${alice.name}`)
 
   // ---------------------------------------------------------------------------
   // 2. Bob Smith — final sale item (hard deny)
@@ -68,7 +70,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${bob.name}`)
+  log(`  Created customer: ${bob.name}`)
 
   // ---------------------------------------------------------------------------
   // 3. Carol Davis — high-value order (mandatory escalation)
@@ -91,7 +93,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${carol.name}`)
+  log(`  Created customer: ${carol.name}`)
 
   // ---------------------------------------------------------------------------
   // 4. David Lee — outside 30-day window
@@ -114,7 +116,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${david.name}`)
+  log(`  Created customer: ${david.name}`)
 
   // ---------------------------------------------------------------------------
   // 5. Emma Wilson — multiple orders: one eligible, one final sale
@@ -145,7 +147,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${emma.name}`)
+  log(`  Created customer: ${emma.name}`)
 
   // ---------------------------------------------------------------------------
   // 6. Frank Brown — boundary case: exactly $500 (auto-approvable)
@@ -168,7 +170,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${frank.name}`)
+  log(`  Created customer: ${frank.name}`)
 
   // ---------------------------------------------------------------------------
   // 7. Grace Taylor — boundary case: $500.01 (must escalate)
@@ -191,7 +193,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${grace.name}`)
+  log(`  Created customer: ${grace.name}`)
 
   // ---------------------------------------------------------------------------
   // 8. Henry Martinez — order already refunded (duplicate refund attempt)
@@ -214,7 +216,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${henry.name}`)
+  log(`  Created customer: ${henry.name}`)
 
   // ---------------------------------------------------------------------------
   // 9. Isabel Anderson — order still pending (not yet delivered)
@@ -237,7 +239,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${isabel.name}`)
+  log(`  Created customer: ${isabel.name}`)
 
   // ---------------------------------------------------------------------------
   // 10. James Thomas — mix: eligible order + final sale order
@@ -268,7 +270,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${james.name}`)
+  log(`  Created customer: ${james.name}`)
 
   // ---------------------------------------------------------------------------
   // 11. Karen Jackson — all orders are final sale (adversarial: pleading)
@@ -299,7 +301,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${karen.name}`)
+  log(`  Created customer: ${karen.name}`)
 
   // ---------------------------------------------------------------------------
   // 12. Liam White — very high-value order (escalation, injection attempt target)
@@ -322,7 +324,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${liam.name}`)
+  log(`  Created customer: ${liam.name}`)
 
   // ---------------------------------------------------------------------------
   // 13. Maria Harris — expired window (60 days old)
@@ -345,7 +347,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${maria.name}`)
+  log(`  Created customer: ${maria.name}`)
 
   // ---------------------------------------------------------------------------
   // 14. Nathan Clark — clean eligible refund, mid-range amount
@@ -368,7 +370,7 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${nathan.name}`)
+  log(`  Created customer: ${nathan.name}`)
 
   // ---------------------------------------------------------------------------
   // 15. Olivia Lewis — near-threshold ($499.99) + final-sale high-value combo
@@ -399,24 +401,29 @@ async function main() {
       },
     },
   })
-  console.log(`  Created customer: ${olivia.name}`)
+  log(`  Created customer: ${olivia.name}`)
 
   const customerCount = await prisma.customer.count()
   const orderCount = await prisma.order.count()
-  console.log(`\nDone! ${customerCount} customers, ${orderCount} orders seeded.`)
-  console.log('\nOrder breakdown by expected outcome:')
-  console.log('  APPROVE    → Alice (1), Emma (1), Frank (1), James (1), Nathan (1), Olivia (1) = 6')
-  console.log('  DENY       → Bob (final sale), David (expired), Emma (final sale), Henry (refunded),')
-  console.log('               Isabel (pending), James (final sale), Karen (2x final sale),')
-  console.log('               Maria (expired), Olivia (final sale) = 10')
-  console.log('  ESCALATE   → Carol (>$500), Grace ($500.01), Liam (>$500) = 3')
+  log(`\nDone! ${customerCount} customers, ${orderCount} orders seeded.`)
+  log('\nOrder breakdown by expected outcome:')
+  log('  APPROVE    → Alice (1), Emma (1), Frank (1), James (1), Nathan (1), Olivia (1) = 6')
+  log('  DENY       → Bob (final sale), David (expired), Emma (final sale), Henry (refunded),')
+  log('               Isabel (pending), James (final sale), Karen (2x final sale),')
+  log('               Maria (expired), Olivia (final sale) = 10')
+  log('  ESCALATE   → Carol (>$500), Grace ($500.01), Liam (>$500) = 3')
 }
 
-main()
-  .catch((e) => {
-    console.error(e)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+// Only auto-run when this file is invoked directly (npm run db:seed).
+// Importing seed() from another module does NOT trigger this.
+import { fileURLToPath } from 'url'
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  seed()
+    .catch((e) => {
+      console.error(e)
+      process.exit(1)
+    })
+    .finally(async () => {
+      await prisma.$disconnect()
+    })
+}
