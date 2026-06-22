@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  orders Order[]
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  customerId   String
+  amount       Float
+  purchaseDate DateTime
+  status       OrderStatus @default(PENDING)
+  isFinalSale  Boolean     @default(false)
+  itemName     String
+  createdAt    DateTime    @default(now())
+
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  refundTransactions RefundTransaction[]
+}
+
+enum OrderStatus {
+  PENDING
+  DELIVERED
+  REFUNDED
+  ESCALATED
+}
+
+model RefundTransaction {
+  id        String         @id @default(cuid())
+  orderId   String
+  decision  RefundDecision
+  reasoning String
+  createdAt DateTime       @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+}
+
+enum RefundDecision {
+  APPROVED
+  DENIED
+  ESCALATED
+}
+
+model TraceLog {
+  id           String   @id @default(cuid())
+  sessionId    String
+  toolName     String?
+  toolInput    Json?
+  toolOutput   Json?
+  latencyMs    Int?
+  inputTokens  Int?
+  outputTokens Int?
+  isRetry      Boolean  @default(false)
+  errorMsg     String?
+  createdAt    DateTime @default(now())
+
+  @@index([sessionId])
+}
