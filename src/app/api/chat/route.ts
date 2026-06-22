@@ -4,6 +4,8 @@ import { runAgent } from '@lib/agent/loop'
 import type { AgentMessage } from '@lib/agent/types'
 
 export interface ChatRequest {
+  /** Authenticated customer ID — injected into the system prompt, never overridable by the user. */
+  customerId: string
   message: string
   /** Omit on the first turn; pass back the value returned by the previous response. */
   sessionId?: string
@@ -25,7 +27,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }
 
-  const { message, sessionId: incoming, history } = body
+  const { customerId, message, sessionId: incoming, history } = body
+
+  if (!customerId || typeof customerId !== 'string' || customerId.trim() === '') {
+    return NextResponse.json({ error: 'customerId is required and must be a non-empty string.' }, { status: 400 })
+  }
 
   if (!message || typeof message !== 'string' || message.trim() === '') {
     return NextResponse.json({ error: 'message is required and must be a non-empty string.' }, { status: 400 })
@@ -36,6 +42,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await runAgent({
       sessionId,
+      customerId: customerId.trim(),
       userMessage: message.trim(),
       history: history ?? [],
     })

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
-import { SYSTEM_PROMPT } from './system-prompt'
+import { buildSystemPrompt } from './system-prompt'
 import { dispatchTool } from './tools'
 import type { AgentMessage, AgentResult, AnyToolOutput, ToolCall } from './types'
 
@@ -115,10 +115,11 @@ async function logTrace(params: {
 
 export async function runAgent(params: {
   sessionId: string
+  customerId: string
   userMessage: string
   history?: AgentMessage[]
 }): Promise<AgentResult> {
-  const { sessionId, userMessage } = params
+  const { sessionId, customerId, userMessage } = params
 
   // Build the full message list for this turn
   const messages: Anthropic.MessageParam[] = [
@@ -136,7 +137,7 @@ export async function runAgent(params: {
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(customerId),
       tools: TOOLS,
       messages,
     })
