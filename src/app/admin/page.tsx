@@ -41,7 +41,7 @@ function ToolBadge({ name }: { name: string | null }) {
 function JsonBlock({ value }: { value: unknown }) {
   if (value == null) return <span className="text-gray-400 text-xs italic">—</span>
   return (
-    <pre className="text-xs font-mono bg-gray-50 border border-gray-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
+    <pre className="text-xs font-mono bg-gray-50 text-gray-900 border border-gray-200 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
       {JSON.stringify(value, null, 2)}
     </pre>
   )
