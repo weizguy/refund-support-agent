@@ -17,15 +17,27 @@ import type {
 
 // ─── Implementations ──────────────────────────────────────────────────────────
 
-async function lookupCustomer(input: LookupCustomerInput): Promise<LookupCustomerResult> {
-  if (!input.customerId && !input.email) {
-    return { found: false, error: 'Must provide either customerId or email.' }
+/**
+ * Always resolves the authenticated customer (authCustomerId).
+ * Any customerId in the input must match auth — prevents LLM from
+ * substituting a different customer ID it received from user messages.
+ * Email input is accepted by the schema but ignored; auth ID is authoritative.
+ */
+async function lookupCustomer(
+  input: LookupCustomerInput,
+  authCustomerId: string,
+): Promise<LookupCustomerResult> {
+  // Reject if the LLM explicitly passed a mismatched customer ID
+  if (input.customerId && input.customerId !== authCustomerId) {
+    return { found: false, error: 'Customer ID does not match the authenticated session.' }
   }
-  const customer = await prisma.customer.findFirst({
-    where: input.customerId ? { id: input.customerId } : { email: input.email },
+
+  // Always resolve by authenticated ID — ignore email to prevent cross-customer lookup
+  const customer = await prisma.customer.findUnique({
+    where: { id: authCustomerId },
     include: { orders: { select: { id: true } } },
   })
-  if (!customer) return { found: false, error: 'No customer found with that ID or email.' }
+  if (!customer) return { found: false, error: 'No customer found.' }
   return {
     found: true,
     customerId: customer.id,
@@ -35,9 +47,19 @@ async function lookupCustomer(input: LookupCustomerInput): Promise<LookupCustome
   }
 }
 
-async function lookupOrder(input: LookupOrderInput): Promise<LookupOrderResult> {
+/**
+ * Returns order details only if the order belongs to the authenticated customer.
+ * Returns "not found" for orders that exist but belong to a different customer
+ * to avoid leaking the existence of other customers' orders.
+ */
+async function lookupOrder(
+  input: LookupOrderInput,
+  authCustomerId: string,
+): Promise<LookupOrderResult> {
   const order = await prisma.order.findUnique({ where: { id: input.orderId } })
-  if (!order) return { found: false, error: 'Order not found.' }
+  if (!order || order.customerId !== authCustomerId) {
+    return { found: false, error: 'Order not found.' }
+  }
   return {
     found: true,
     orderId: order.id,
@@ -113,9 +135,14 @@ function checkRefundPolicy(input: CheckRefundPolicyInput): CheckRefundPolicyResu
   }
 }
 
-async function escalateToHuman(input: EscalateToHumanInput): Promise<EscalateToHumanResult> {
+async function escalateToHuman(
+  input: EscalateToHumanInput,
+  authCustomerId: string,
+): Promise<EscalateToHumanResult> {
   const order = await prisma.order.findUnique({ where: { id: input.orderId } })
-  if (!order) return { success: false, error: 'Order not found.' }
+  if (!order || order.customerId !== authCustomerId) {
+    return { success: false, error: 'Order not found.' }
+  }
   if (order.status === OrderStatus.ESCALATED) {
     return { success: false, error: 'Order is already escalated.' }
   }
@@ -137,12 +164,19 @@ async function escalateToHuman(input: EscalateToHumanInput): Promise<EscalateToH
   return { success: true, transactionId: tx.id }
 }
 
-async function issueRefund(input: IssueRefundInput): Promise<IssueRefundResult> {
+async function issueRefund(
+  input: IssueRefundInput,
+  authCustomerId: string,
+): Promise<IssueRefundResult> {
   const order = await prisma.order.findUnique({ where: { id: input.orderId } })
-  if (!order) return { success: false, error: 'Order not found.' }
 
-  // Server-side policy re-check — defence-in-depth.
-  // Even if the LLM tries to skip checkRefundPolicy, this gate holds.
+  // Ownership check — defence-in-depth layer 1
+  if (!order || order.customerId !== authCustomerId) {
+    return { success: false, error: 'Order not found.' }
+  }
+
+  // Policy re-check — defence-in-depth layer 2.
+  // Even if the LLM skips checkRefundPolicy, this gate holds.
   if (order.status !== OrderStatus.DELIVERED) {
     return { success: false, error: `Cannot refund: order status is ${order.status}.` }
   }
@@ -175,13 +209,15 @@ async function issueRefund(input: IssueRefundInput): Promise<IssueRefundResult> 
 }
 
 // ─── Dispatcher ───────────────────────────────────────────────────────────────
+// authCustomerId is passed as out-of-band context — it is not part of the
+// tool's JSON input visible to the LLM, so the model cannot influence it.
 
-export async function dispatchTool(call: ToolCall): Promise<AnyToolOutput> {
+export async function dispatchTool(call: ToolCall, authCustomerId: string): Promise<AnyToolOutput> {
   switch (call.name) {
-    case 'lookupCustomer':    return lookupCustomer(call.input)
-    case 'lookupOrder':       return lookupOrder(call.input)
+    case 'lookupCustomer':    return lookupCustomer(call.input, authCustomerId)
+    case 'lookupOrder':       return lookupOrder(call.input, authCustomerId)
     case 'checkRefundPolicy': return checkRefundPolicy(call.input)
-    case 'escalateToHuman':   return escalateToHuman(call.input)
-    case 'issueRefund':       return issueRefund(call.input)
+    case 'escalateToHuman':   return escalateToHuman(call.input, authCustomerId)
+    case 'issueRefund':       return issueRefund(call.input, authCustomerId)
   }
 }

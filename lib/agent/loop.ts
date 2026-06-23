@@ -177,12 +177,12 @@ export async function runAgent(params: {
       const start = Date.now()
 
       try {
-        output = await dispatchTool(toolCall)
+        output = await dispatchTool(toolCall, customerId)
       } catch (err) {
         // Retry once on transient errors (e.g. DB connection blip)
         isRetry = true
         try {
-          output = await dispatchTool(toolCall)
+          output = await dispatchTool(toolCall, customerId)
         } catch (retryErr) {
           errorMsg = retryErr instanceof Error ? retryErr.message : String(retryErr)
           output = { found: false, error: errorMsg } as AnyToolOutput
